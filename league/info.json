@@ -1,0 +1,11 @@
+{
+    "AUTHOR" : "Sweenu",
+    "INSTALL_MSG" : "Congrat, you'll never have to use lolking ever.",
+    "NAME" : "league",
+    "SHORT" : "Get information about League of Legends, including activate games.",
+    "DESCRIPTION" : "With a simple !gameinfo <summoner name>, get info about players ranks.",
+    "TAGS" : ["games"],
+    "HIDDEN" : false
+}
+
+
