@@ -40,9 +40,9 @@ class League:
     @commands.command()
     async def gameinfo(self, summonerName):
         """Fetch info about the currently active game of a summoner."""
-        summonerId = self._get_summoner(summonerName)['id']
-        active_game = self._get_activeGame(summonerId)
-        maps = self._get_maps()
+        summoner = await self._get_summoner(summonerName)
+        active_game = await self._get_activeGame(summoner['id'])
+        maps = await self._get_maps()
         for m in maps['data']:
             if m['mapId'] == active_game['mapId']:
                 map_name = m['mapName']
