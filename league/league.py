@@ -1,8 +1,12 @@
+from pathlib import Path
+
 import aiohttp
 from aiohttp.web_exceptions import HTTPClientError, HTTPServerError
 from discord.ext import commands
 
-with open('../api_key') as f:
+
+dir_root_path = Path(__file__).resolve().parent.parent
+with open(dir_root_path / 'api_key') as f:
     api_key = f.read()
 
 
