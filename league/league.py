@@ -2,7 +2,8 @@ import aiohttp
 from aiohttp.web_exceptions import HTTPClientError, HTTPServerError
 from discord.ext import commands
 
-api_key = 'RGAPI-1bc7569a-ac39-4570-9d0c-fd4775c12c29'
+with open('../api_key') as f:
+    api_key = f.read()
 
 
 class League:
