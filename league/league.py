@@ -1,4 +1,5 @@
 import aiohttp
+from aiohttp.web_exceptions import HTTPClientError, HTTPServerError
 from discord.ext import commands
 
 api_key = 'RGAPI-1bc7569a-ac39-4570-9d0c-fd4775c12c29'
@@ -15,23 +16,44 @@ class League:
         """Fetch info from League of Legends api."""
         url = '{}/{}?api_key={}'.format(self.url, path, api_key)
         async with aiohttp.get(url) as r:
-            return await r.json()
+            if r.status_code == 404:
+                raise HTTPClientError()
+            if int(r.status_code / 100) == 5:
+                self.bot.say('A server error as occured, '
+                             'please try again later')
+                raise HTTPServerError
+            else:
+                return await r.json()
 
     def _get_summoner(self, summonerName):
         path = '/lol/summoner/v3/summoners/by-name/'
-        return self._fetch_url(path + summonerName)
+        try:
+            return self._fetch_url(path + summonerName)
+        except HTTPClientError as e:
+            self.bot.say('Oops, are you sure this is a valid summoner name?')
+            raise e
 
     def _get_activeGame(self, summonerId):
         path = '/lol/spectator/v3/active-games/by-summoner/'
-        return self._fetch_url(path + summonerId)
+        try:
+            return self._fetch_url(path + str(summonerId))
+        except HTTPClientError as e:
+            self.bot.say('Oops, are you sure the summoner '
+                         'is currently in game?')
+            raise e
 
     def _get_position(self, summonerId):
         path = '/lol/league/v3/positions/by-summoner/'
-        return self._fetch_url(path + summonerId)
+        response = self._fetch_url(path + str(summonerId))
+        if response:
+            return response
+        else:
+            self.bot.say("Oops, are you sure the summoner is ranked?")
+            raise RuntimeError
 
     def _get_champion(self, championId):
         path = '/lol/static-data/v3/champions/'
-        return self._fetch_url(path + championId)
+        return self._fetch_url(path + str(championId))
 
     def _get_maps(self):
         path = '/lol/static-data/v3/maps'
@@ -40,10 +62,14 @@ class League:
     @commands.command()
     async def gameinfo(self, summonerName):
         """Fetch info about the currently active game of a summoner."""
-        summoner = await self._get_summoner(summonerName)
-        active_game = await self._get_activeGame(summoner['id'])
-        maps = await self._get_maps()
-        for m in maps['data']:
+        try:
+            summoner = await self._get_summoner(summonerName)
+            active_game = await self._get_activeGame(summoner['id'])
+            maps = await self._get_maps()
+        except (HTTPClientError, HTTPServerError):
+            return
+
+        for m in maps['data'].values():
             if m['mapId'] == active_game['mapId']:
                 map_name = m['mapName']
                 break
@@ -53,17 +79,21 @@ class League:
         team1 = []
         team2 = []
         id_team1 = active_game['participants'][0]['teamId']
-        for participant in active_game['participants']:
-            league = self._get_position(participant['summonerId'])
-            champion = self._get_champion(participant['championId'])['name']
+        for p in active_game['participants']:
+            try:
+                league = self._get_position(p['summonerId'])
+                champion = self._get_champion(p['championId'])['name']
+            except (HTTPClientError, HTTPServerError, RuntimeError):
+                return
+
             for queue in league:
                 if queue['queueType'] == 'RANKED_SOLO_5x5':
                     rank_solo = "{} {}".format(queue['tier'], queue['rank'])
                 elif queue['queueType'] == 'RANKED_FLEX_SR':
                     rank_flex = "{} {}".format(queue['tier'], queue['rank'])
 
-            info = participant['summonerName'], champion, rank_solo, rank_flex
-            if participant['teamId'] == id_team1:
+            info = p['summonerName'], champion, rank_solo, rank_flex
+            if p['teamId'] == id_team1:
                 team1.append(info)
             else:
                 team2.append(info)
