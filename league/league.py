@@ -1,13 +1,12 @@
 from pathlib import Path
 
 import aiohttp
-from aiohttp.web_exceptions import HTTPClientError, HTTPServerError
+from aiohttp.web_exceptions import HTTPNotFound
 from discord.ext import commands
 
-
 dir_root_path = Path(__file__).resolve().parent.parent
-with open(dir_root_path / 'api_key') as f:
-    api_key = f.read()
+with open(str(dir_root_path / 'api_key')) as f:
+    api_key = f.read().strip()
 
 
 class League:
@@ -21,48 +20,44 @@ class League:
         """Fetch info from League of Legends api."""
         url = '{}/{}?api_key={}'.format(self.url, path, api_key)
         async with aiohttp.get(url) as r:
-            if r.status_code == 404:
-                raise HTTPClientError()
-            if int(r.status_code / 100) == 5:
-                self.bot.say('A server error as occured, '
-                             'please try again later')
-                raise HTTPServerError
+            if r.status == 404:
+                raise HTTPNotFound()
             else:
                 return await r.json()
 
-    def _get_summoner(self, summonerName):
+    async def _get_summoner(self, summonerName):
         path = '/lol/summoner/v3/summoners/by-name/'
         try:
-            return self._fetch_url(path + summonerName)
-        except HTTPClientError as e:
-            self.bot.say('Oops, are you sure this is a valid summoner name?')
+            return await self._fetch_url(path + summonerName)
+        except HTTPNotFound as e:
+            await self.bot.say('Oops, are you sure this is a valid summoner name?')
             raise e
 
-    def _get_activeGame(self, summonerId):
+    async def _get_activeGame(self, summonerId):
         path = '/lol/spectator/v3/active-games/by-summoner/'
         try:
-            return self._fetch_url(path + str(summonerId))
-        except HTTPClientError as e:
-            self.bot.say('Oops, are you sure the summoner '
+            return await self._fetch_url(path + str(summonerId))
+        except HTTPNotFound as e:
+            await self.bot.say('Oops, are you sure the summoner '
                          'is currently in game?')
             raise e
 
-    def _get_position(self, summonerId):
+    async def _get_position(self, summonerId):
         path = '/lol/league/v3/positions/by-summoner/'
-        response = self._fetch_url(path + str(summonerId))
+        response = await self._fetch_url(path + str(summonerId))
         if response:
             return response
         else:
-            self.bot.say("Oops, are you sure the summoner is ranked?")
+            await self.bot.say("Oops, are you sure the summoner is ranked?")
             raise RuntimeError
 
-    def _get_champion(self, championId):
+    async def _get_champion(self, championId):
         path = '/lol/static-data/v3/champions/'
-        return self._fetch_url(path + str(championId))
+        return await self._fetch_url(path + str(championId))
 
-    def _get_maps(self):
+    async def _get_maps(self):
         path = '/lol/static-data/v3/maps'
-        return self._fetch_url(path)
+        return await self._fetch_url(path)
 
     @commands.command()
     async def gameinfo(self, summonerName):
@@ -71,7 +66,7 @@ class League:
             summoner = await self._get_summoner(summonerName)
             active_game = await self._get_activeGame(summoner['id'])
             maps = await self._get_maps()
-        except (HTTPClientError, HTTPServerError):
+        except HTTPNotFound:
             return
 
         for m in maps['data'].values():
@@ -86,11 +81,13 @@ class League:
         id_team1 = active_game['participants'][0]['teamId']
         for p in active_game['participants']:
             try:
-                league = self._get_position(p['summonerId'])
-                champion = self._get_champion(p['championId'])['name']
-            except (HTTPClientError, HTTPServerError, RuntimeError):
+                league = await self._get_position(p['summonerId'])
+                champion = (await self._get_champion(p['championId']))['name']
+            except (HTTPNotFound, RuntimeError):
                 return
 
+            rank_solo = 'Unranked'
+            rank_flex = 'Unranked'
             for queue in league:
                 if queue['queueType'] == 'RANKED_SOLO_5x5':
                     rank_solo = "{} {}".format(queue['tier'], queue['rank'])
